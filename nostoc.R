@@ -248,6 +248,50 @@ kk.3 <- enrichKEGG(gene         = cluster3.pam3,
                    pvalueCutoff = 0.05)
 as.data.frame(kk.3)
 
+## heatmap
+
+head(mean.gene.expression)
+dim(mean.gene.expression)
+clusters.mean.expression <- mean.gene.expression[c(cluster1.pam3,cluster2.pam3,cluster3.pam3),]
+
+genes <- rownames(clusters.mean.expression)
+
+scaled.gene.expression <- matrix(nrow=length(genes),ncol=97)
+
+for(i in 1:length(genes))
+{
+  current.gene <- genes[i]
+  
+  expression.current.gene.i <- clusters.mean.expression[current.gene,]/max(clusters.mean.expression[current.gene,])
+  
+  scaled.gene.expression[i,] <- approx(x=c(0,3,9,24),expression.current.gene.i,xout=seq(from=0,to=24,by=0.25))[[2]]
+}
+
+library(gplots)
+colfunc <- colorRampPalette(c("black","blue","yellow"))
+
+png(filename = "figures/heatmap.png",width = 600)
+heatmap.2(scaled.gene.expression,Colv =FALSE,trace=c("none"),dendrogram = "none",col=colfunc(100),density.info=c("none"),key=FALSE,margins = c(2,8),cexRow = 1.2,Rowv=FALSE,labCol = c(""),labRow = "")
+dev.off()
+
+
+scaled.gene.expression <- matrix(nrow=length(genes),ncol=4)
+
+for(i in 1:length(genes))
+{
+  current.gene <- genes[i]
+  
+  scaled.gene.expression[i,] <- clusters.mean.expression[current.gene,]/max(clusters.mean.expression[current.gene,])
+}
+
+library(gplots)
+colfunc <- colorRampPalette(c("black","blue","yellow"))
+
+png(filename = "figures/heatmap_sin_interpolacion.png",width = 600)
+heatmap.2(scaled.gene.expression,Colv =FALSE,trace=c("none"),dendrogram = "none",col=colfunc(100),density.info=c("none"),key=FALSE,margins = c(2,8),cexRow = 1.2,Rowv=FALSE,labCol = c(""),labRow = "")
+dev.off()
+
+
 
 
 
