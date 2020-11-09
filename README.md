@@ -1,2 +1,2 @@
 # nostoc
-RNA-seq data analysis from Nostoc using bioconductor R packages
+RNA-seq data analysis for the role of a cryptic tRNA gene operon in the recovery from translational stress in the cyanobacterium Nostoc using bioconductor R packages
