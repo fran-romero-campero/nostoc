@@ -1,44 +1,24 @@
+## R script for the analysis of the transcriptomic data obtained using RNA-seq
+## to characterized the role of a cryptic tRNA gene operon in the recovery from 
+## translational stress
+
+## Authors: Ana B. Romero-Losada and Francisco J. Romero-Campero
+## Contact: Francisco J. Romero-Campero - email: fran@us.es
+
+## Load libraries
 library(FactoMineR)
 library(factoextra)
-library(ballgown)
 library(VennDiagram)
 
-experimental.design <- read.csv("experimental_design.csv",as.is=T)
-experimental.design
-
-bg.data <- ballgown(dataDir = ".", samplePattern = "sample", pData=experimental.design)
-bg.data
-sampleNames(bg.data)
-
-gene.expression <- gexpr(bg.data)
-head(gene.expression)
-dim(gene.expression)
-
-colnames(gene.expression) <- c("rep1_0","rep1_3","rep1_9","rep1_24",
-                               "rep2_0","rep2_3","rep2_9","rep2_24",
-                               "rep3_0","rep3_3","rep3_9","rep3_24")
-
-
-gene.names.correspondence <- read.table(file="gene_names_correspondence.tsv",sep="\t",header=F,as.is=T)
-gene.names <- gene.names.correspondence$V2
-names(gene.names) <- gene.names.correspondence$V1
-
-rownames(gene.expression)[which(is.na(gene.names[rownames(gene.expression)]))]
-
-df.gene.expression <- data.frame(gene_id=rownames(gene.expression),gene_name=gene.names[rownames(gene.expression)],gene.expression,stringsAsFactors = F)
-df.gene.expression$gene_name[which(df.gene.expression$gene_name == "")] <- df.gene.expression$gene_id[which(df.gene.expression$gene_name == "")]
-
-df.gene.expression <- df.gene.expression[!is.na(df.gene.expression$gene_name),]
-
-write.table(x=df.gene.expression,file = "gene_expression_complete.tsv",sep = "\t",quote = F,row.names = F)
+## Load gene expression data and convert it into a matrix
 df.gene.expression <- read.table(file = "gene_expression_complete.tsv",sep="\t",as.is=T,header=T)
-
 
 gene.expression <- as.matrix(df.gene.expression[,3:ncol(df.gene.expression)])
 is.matrix(gene.expression)
 head(gene.expression)
 rownames(gene.expression) <- df.gene.expression$gene_name
 
+## Compute mean gene expression
 h0 <- (df.gene.expression$rep1_0 + df.gene.expression$rep2_0 + df.gene.expression$rep3_0)/3
 h3 <- (df.gene.expression$rep1_3 + df.gene.expression$rep2_3 + df.gene.expression$rep3_3)/3
 h9 <- (df.gene.expression$rep1_9 + df.gene.expression$rep2_9 + df.gene.expression$rep3_9)/3
@@ -48,6 +28,7 @@ mean.gene.expression <- matrix(c(h0,h3,h9,h24),ncol=4)
 colnames(mean.gene.expression) <- c("h0","h3","h9","h24")
 rownames(mean.gene.expression) <- df.gene.expression$gene_name
 
+## Perform Principal Component Analysis
 pca.gene.expression <- data.frame(colnames(gene.expression),t(gene.expression))
 colnames(pca.gene.expression)[1] <- "Sample"
 
@@ -57,6 +38,7 @@ fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 70),main = "")
 ## Hierarchical clustering
 res.hcpc <- HCPC(res.pca, graph=FALSE,nb.clust = 3)    
 
+## Generate representation of hierarchical tree
 png(filename = "figures/hierarchical_tree.png",width = 800,height = 400)
 fviz_dend(res.hcpc,k=4,
           cex = 1,                     # Label size
@@ -68,14 +50,15 @@ fviz_dend(res.hcpc,k=4,
 )
 dev.off()
 
+# Extract expressed genes
 nrow(gene.expression)
 gene.expression <- gene.expression[apply(X = gene.expression,MARGIN = 1,FUN = sum) != 0,]
-
 nrow(gene.expression)
 
+## Log2 transformation of gene expression data
 log2.gene.expression <- log2(gene.expression + 1)
 
-
+## Function for scatter plots comparing replicates
 replicate.scatter.plot <- function(rep1,rep2,gexpress)
 {
   plot(x=gexpress[,rep1],y = gexpress[,rep2],pch=19,cex=0.8,col="darkgrey",xlab=paste(rep1,"h"),ylab=paste(rep2,"h"),cex.lab=1.5)
@@ -144,14 +127,15 @@ length(final.degs)
 
 degs.expression <- gene.expression[final.degs,]
 
-library(WGCNA)
+## Co-expression Clustering analysis
+## Load libraries and allow for multi-threading
 library(cluster)
-allowWGCNAThreads()
 
+## Compute distance based on correlation for clustering analysis
 gene.correlation <- cor(t(degs.expression))
-
 distance.matrix <- 1 - gene.correlation
 
+## Compute hierarchical clustering for different number of clusters
 hierarchical.clustering <- hclust(as.dist(distance.matrix),method="average")
 
 hclust.2 <- cutree(hierarchical.clustering,k=2)
@@ -164,6 +148,7 @@ hclust.8 <- cutree(hierarchical.clustering,k=8)
 hclust.9 <- cutree(hierarchical.clustering,k=9)
 hclust.10 <- cutree(hierarchical.clustering,k=10)
 
+## Compute PAM clustering for different number of clusters
 pam.2 <- pam(as.dist(distance.matrix),k=2,diss=TRUE)
 pam.3 <- pam(as.dist(distance.matrix),k=3,diss=TRUE)
 pam.4 <- pam(as.dist(distance.matrix),k=4,diss=TRUE)
@@ -174,6 +159,7 @@ pam.8 <- pam(as.dist(distance.matrix),k=8,diss=TRUE)
 pam.9 <- pam(as.dist(distance.matrix),k=9,diss=TRUE)
 pam.10 <- pam(as.dist(distance.matrix),k=10,diss=TRUE)
 
+## Compute silhouette for hierarchical and PAM different clusterings
 sil2 <- silhouette(hclust.2,dist=distance.matrix)
 sil3 <- silhouette(hclust.3,dist=distance.matrix)
 sil4 <- silhouette(hclust.4,dist=distance.matrix)
@@ -198,6 +184,7 @@ sil10 <- silhouette(pam.10)
 
 pam.sil.values <- c(summary(sil2)[["avg.width"]],summary(sil3)[["avg.width"]],summary(sil4)[["avg.width"]],summary(sil5)[["avg.width"]],summary(sil6)[["avg.width"]],summary(sil7)[["avg.width"]],summary(sil8)[["avg.width"]],summary(sil9)[["avg.width"]],summary(sil10)[["avg.width"]])
 
+## Plot silhouettes
 plot(2:10,pam.sil.values,type="o",col="blue",pch=0,ylim=c(0.3,0.8),xlab="Number of clusters",ylab="Silhouette",lwd=3)
 lines(2:10,hclust.sil.values,type="o",col="red",pch=1,xlab="",ylab="",lwd=3)
 legend("topright",legend=c("PAM","HCLUST"),col=c("blue","red"),pch=c(0,1),lwd=3)
@@ -207,7 +194,7 @@ plot(2:6,pam.sil.values[1:5],type="o",col="blue",pch=0,ylim=c(0.3,0.8),xlab="Num
 lines(2:6,hclust.sil.values[1:5],type="o",col="red",pch=1,xlab="",ylab="",lwd=3)
 legend("topright",legend=c("PAM","HCLUST"),col=c("blue","red"),pch=c(0,1),lwd=3)
 
-## Three clustres
+## Extract best clutering PAM with Three clustres
 cluster1.pam3 <- names(which(pam.3[["clustering"]] == 1))
 length(cluster1.pam3)
 cluster2.pam3 <- names(which(pam.3[["clustering"]] == 2))
@@ -215,23 +202,28 @@ length(cluster2.pam3)
 cluster3.pam3 <- names(which(pam.3[["clustering"]] == 3))
 length(cluster3.pam3)
 
+## Extract gene expression for each cluster
 expr.cluster1.pam3 <- mean.gene.expression[cluster1.pam3,]
 expr.cluster2.pam3 <- mean.gene.expression[cluster2.pam3,]
 expr.cluster3.pam3 <- mean.gene.expression[cluster3.pam3,]
 
+## compute average cluster gene expression
 mean.profile.cluster1.pam3 <- colMeans(expr.cluster1.pam3)
 mean.profile.cluster2.pam3 <- colMeans(expr.cluster2.pam3)
 mean.profile.cluster3.pam3 <- colMeans(expr.cluster3.pam3)
 
+## Plot average cluster gene expression
 plot(x = c(0,3,9,24),mean.profile.cluster1.pam3,type="o",col="blue",xlab="Time (h)",ylab="Expression Level (FPKM)",lwd=3,pch=0,main="Cluster Profiles",ylim=c(0,800))
 lines(x = c(0,3,9,24),mean.profile.cluster2.pam3,type="o",col="red",lwd=3,pch=1)
 lines(x = c(0,3,9,24),mean.profile.cluster3.pam3,type="o",col="darkgreen",lwd=3,pch=1)
 
-write.table(x = cluster1.pam3, file = "cluster_azul_respuesta_rapida.txt",quote = F,row.names = F,col.names = F)
-write.table(x = cluster2.pam3, file = "cluster_red_respuesta_progresiva.txt",quote = F,row.names = F,col.names = F)
-write.table(x = cluster3.pam3, file = "cluster_verde_represion_rapida.txt",quote = F,row.names = F,col.names = F)
+## Write genes for each cluster
+write.table(x = cluster1.pam3, file = "cluster_blue_fast_activation.txt",quote = F,row.names = F,col.names = F)
+write.table(x = cluster2.pam3, file = "cluster_red_steady_activation.txt",quote = F,row.names = F,col.names = F)
+write.table(x = cluster3.pam3, file = "cluster_green_repression.txt",quote = F,row.names = F,col.names = F)
 
-
+## kEGG pathway enrichment analysis
+library(clusterProfiler)
 kk.1 <- enrichKEGG(gene         = cluster1.pam3,
                  organism     = 'ana',
                  pvalueCutoff = 0.05)
@@ -248,8 +240,7 @@ kk.3 <- enrichKEGG(gene         = cluster3.pam3,
                    pvalueCutoff = 0.05)
 as.data.frame(kk.3)
 
-## heatmap
-
+## Heatmaps
 head(mean.gene.expression)
 dim(mean.gene.expression)
 clusters.mean.expression <- mean.gene.expression[c(cluster1.pam3,cluster2.pam3,cluster3.pam3),]
@@ -287,120 +278,6 @@ for(i in 1:length(genes))
 library(gplots)
 colfunc <- colorRampPalette(c("black","blue","yellow"))
 
-png(filename = "figures/heatmap_sin_interpolacion.png",width = 600)
+png(filename = "figures/heatmap_no_interpolation.png",width = 600)
 heatmap.2(scaled.gene.expression,Colv =FALSE,trace=c("none"),dendrogram = "none",col=colfunc(100),density.info=c("none"),key=FALSE,margins = c(2,8),cexRow = 1.2,Rowv=FALSE,labCol = c(""),labRow = "")
 dev.off()
-
-
-
-
-
-
-##########################
-## EXPLORATORY ANALYSIS ##
-##########################
-
-
-## Four clustres
-cluster1.pam4 <- names(which(pam.4[["clustering"]] == 1))
-length(cluster1.pam4)
-cluster2.pam4 <- names(which(pam.4[["clustering"]] == 2))
-length(cluster2.pam4)
-cluster3.pam4 <- names(which(pam.4[["clustering"]] == 3))
-length(cluster3.pam4)
-cluster4.pam4 <- names(which(pam.4[["clustering"]] == 4))
-length(cluster4.pam4)
-
-expr.cluster1.pam4 <- mean.gene.expression[cluster1.pam4,]
-expr.cluster2.pam4 <- mean.gene.expression[cluster2.pam4,]
-expr.cluster3.pam4 <- mean.gene.expression[cluster3.pam4,]
-expr.cluster4.pam4 <- mean.gene.expression[cluster4.pam4,]
-
-mean.profile.cluster1.pam4 <- colMeans(expr.cluster1.pam4)
-mean.profile.cluster2.pam4 <- colMeans(expr.cluster2.pam4)
-mean.profile.cluster3.pam4 <- colMeans(expr.cluster3.pam4)
-mean.profile.cluster4.pam4 <- colMeans(expr.cluster4.pam4)
-
-plot(x = c(0,3,9,24),mean.profile.cluster1.pam4,type="o",col="blue",xlab="Time (h)",ylab="Expression Level (FPKM)",lwd=3,pch=0,main="Cluster Profiles",ylim=c(0,800))
-lines(x = c(0,3,9,24),mean.profile.cluster2.pam4,type="o",col="red",lwd=3,pch=1)
-lines(x = c(0,3,9,24),mean.profile.cluster3.pam4,type="o",col="darkgreen",lwd=3,pch=1)
-lines(x = c(0,3,9,24),mean.profile.cluster4.pam4,type="o",col="black",lwd=3,pch=1)
-
-
-kk.1 <- enrichKEGG(gene         = cluster1.pam4,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.1)
-
-kk.2 <- enrichKEGG(gene         = cluster2.pam4,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.2)
-
-kk.3 <- enrichKEGG(gene         = cluster3.pam4,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.3)
-
-kk.4 <- enrichKEGG(gene         = cluster4.pam4,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.4)
-
-
-## Five clustres
-cluster1.pam5 <- names(which(pam.5[["clustering"]] == 1))
-length(cluster1.pam5)
-cluster2.pam5 <- names(which(pam.5[["clustering"]] == 2))
-length(cluster2.pam5)
-cluster3.pam5 <- names(which(pam.5[["clustering"]] == 3))
-length(cluster3.pam5)
-cluster4.pam5 <- names(which(pam.5[["clustering"]] == 4))
-length(cluster4.pam5)
-cluster5.pam5 <- names(which(pam.5[["clustering"]] == 5))
-length(cluster5.pam5)
-
-expr.cluster1.pam5 <- mean.gene.expression[cluster1.pam5,]
-expr.cluster2.pam5 <- mean.gene.expression[cluster2.pam5,]
-expr.cluster3.pam5 <- mean.gene.expression[cluster3.pam5,]
-expr.cluster4.pam5 <- mean.gene.expression[cluster4.pam5,]
-expr.cluster5.pam5 <- mean.gene.expression[cluster5.pam5,]
-
-mean.profile.cluster1.pam5 <- colMeans(expr.cluster1.pam5)
-mean.profile.cluster2.pam5 <- colMeans(expr.cluster2.pam5)
-mean.profile.cluster3.pam5 <- colMeans(expr.cluster3.pam5)
-mean.profile.cluster4.pam5 <- colMeans(expr.cluster4.pam5)
-mean.profile.cluster5.pam5 <- colMeans(expr.cluster5.pam5)
-
-plot(x = c(0,3,9,24),mean.profile.cluster1.pam5,type="o",col="blue",xlab="Time (h)",ylab="Expression Level (FPKM)",lwd=3,pch=0,main="Cluster Profiles",ylim=c(0,800))
-lines(x = c(0,3,9,24),mean.profile.cluster2.pam5,type="o",col="red",lwd=3,pch=1)
-lines(x = c(0,3,9,24),mean.profile.cluster3.pam5,type="o",col="darkgreen",lwd=3,pch=1)
-lines(x = c(0,3,9,24),mean.profile.cluster4.pam5,type="o",col="black",lwd=3,pch=1)
-lines(x = c(0,3,9,24),mean.profile.cluster5.pam5,type="o",col="orange",lwd=3,pch=1)
-
-
-kk.1 <- enrichKEGG(gene         = cluster1.pam5,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.1)
-
-kk.2 <- enrichKEGG(gene         = cluster2.pam5,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.2)
-
-kk.3 <- enrichKEGG(gene         = cluster3.pam5,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.3)
-
-kk.4 <- enrichKEGG(gene         = cluster4.pam5,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.4)
-
-kk.5 <- enrichKEGG(gene         = cluster5.pam5,
-                   organism     = 'ana',
-                   pvalueCutoff = 0.05)
-as.data.frame(kk.5)
-
